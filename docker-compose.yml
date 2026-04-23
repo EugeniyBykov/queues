@@ -1,0 +1,59 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: queues-api
+    ports:
+      - "${PORT}:3000"
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_started
+      redis:
+        condition: service_started
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: yarn start:dev
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: queues-worker
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_started
+      redis:
+        condition: service_started
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: yarn start:worker:dev
+
+  db:
+    image: postgres:16-alpine
+    container_name: queues-db
+    ports:
+      - "${DB_PORT}:5432"
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: queues-redis
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
