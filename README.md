@@ -4,7 +4,7 @@ NestJS service that delivers messages to webhook / internal-service / email chan
 
 ## What it does
 
-- `POST /deliveries` enqueues a single delivery to the `delivery` BullMQ queue. To deliver the same message to multiple channels, POST once per channel.
+- `POST /deliveries` enqueues one delivery (one channel + target) onto the `delivery` BullMQ queue.
 - The worker picks up each job and dispatches it to the channel over HTTP.
 - On failure, BullMQ retries with exponential backoff (default 5 attempts, 1s base).
 - On terminal failure (all retries exhausted, or a `4xx` response → "permanent"), the job is published to `dead_letter` and persisted to Postgres.
@@ -42,18 +42,22 @@ yarn start:worker:dev  # terminal 2: Worker
 
 All configuration comes from environment variables (see `.env.example`):
 
-| Var | Meaning | Default |
-|---|---|---|
-| `PORT` | API HTTP port | `3000` |
-| `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` | Postgres connection | `db` / `5432` / `postgres` / `postgres` / `queues` |
-| `REDIS_HOST` / `REDIS_PORT` | Redis connection | `redis` / `6379` |
-| `INTERNAL_SERVICE_URL` | URL for the `internal-service` channel | `http://localhost:3000/mock/internal-service` |
-| `EMAIL_SERVICE_URL` | URL for the `email` channel | `http://localhost:3000/mock/email` |
-| `CHANNEL_TIMEOUT_MS` | Axios timeout for channel calls | `10000` |
-| `DELIVERY_MAX_ATTEMPTS` | BullMQ retry attempts per delivery | `5` |
-| `DELIVERY_BACKOFF_BASE_MS` | Exponential backoff base delay | `1000` |
+| Var | Meaning | Required? | Example / default |
+|---|---|---|---|
+| `PORT` | API HTTP port | optional | `3000` |
+| `DB_HOST` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` | Postgres connection | **required** | `db` / `postgres` / `postgres` / `queues` |
+| `DB_PORT` | Postgres port | optional | `5432` |
+| `REDIS_HOST` | Redis host | **required** | `redis` |
+| `REDIS_PORT` | Redis port | optional | `6379` |
+| `INTERNAL_SERVICE_URL` | URL for the `internal-service` channel | **required** | `http://localhost:3000/mock/internal-service` |
+| `EMAIL_SERVICE_URL` | URL for the `email` channel | **required** | `http://localhost:3000/mock/email` |
+| `CHANNEL_TIMEOUT_MS` | Axios timeout for channel calls | optional | `10000` |
+| `DELIVERY_MAX_ATTEMPTS` | BullMQ retry attempts per delivery | optional | `5` |
+| `DELIVERY_BACKOFF_BASE_MS` | Exponential backoff base delay | optional | `1000` |
+| `LOG_LEVEL` | Winston log level | optional | `info` |
+| `SENTRY_DSN` / `SENTRY_ENVIRONMENT` | Sentry reporting | optional | — / `development` |
 
-The default URLs point at the built-in mock controller (see [Local mocks](#local-mocks)) so the full pipeline works out of the box without any external services.
+Required vars are enforced by `class-validator` in `src/config/config.validation.ts` and the process refuses to start without them. Optional vars have framework defaults in `src/config/configuration.ts`. The example URLs above point at the built-in mock controller (see [Local mocks](#local-mocks)) so the full pipeline works out of the box without any external services — copy them from `.env.example`.
 
 ## API
 
