@@ -11,6 +11,9 @@ import { DeadLetterModule } from '../dead-letter/dead-letter.module';
 import { AdminModule } from '../admin/admin.module';
 import { LoggerModule } from '../logger/logger.module';
 import { DeadLetterRecord } from '../dead-letter/dead-letter.entity';
+import { MockController } from '../mocks/mock.controller';
+
+const isProduction = process.env.NODE_ENV === 'production';
 
 @Module({
   imports: [
@@ -43,6 +46,6 @@ import { DeadLetterRecord } from '../dead-letter/dead-letter.entity';
     DeadLetterModule,
     AdminModule,
   ],
-  controllers: [DeliveryController],
+  controllers: [DeliveryController, ...(isProduction ? [] : [MockController])],
 })
 export class ApiModule {}

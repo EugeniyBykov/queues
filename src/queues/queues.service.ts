@@ -1,12 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
-import { QUEUES, JOB_NAMES } from './constants';
+import { QUEUES, JOB_NAMES, QueueName } from './constants';
 import {
   DeadLetterPayload,
   DeliveryPayload,
 } from '../delivery/delivery.interface';
+
+const KNOWN_QUEUES = Object.values(QUEUES);
+const FAILED_JOB_RETENTION_SECONDS = 86_400;
 
 @Injectable()
 export class QueuesService {
@@ -33,7 +36,10 @@ export class QueuesService {
   }
 
   enqueueDeadLetter(payload: DeadLetterPayload) {
-    return this.deadLetterQueue.add(JOB_NAMES.DEAD_LETTER, payload);
+    return this.deadLetterQueue.add(JOB_NAMES.DEAD_LETTER, payload, {
+      removeOnComplete: true,
+      removeOnFail: { age: FAILED_JOB_RETENTION_SECONDS },
+    });
   }
 
   getDeliveryQueue(): Queue {
@@ -44,6 +50,15 @@ export class QueuesService {
     return this.deadLetterQueue;
   }
 
+  getByName(name: string): Queue {
+    if (!KNOWN_QUEUES.includes(name as QueueName)) {
+      throw new BadRequestException(
+        `Unknown queue: ${name}. Valid: ${KNOWN_QUEUES.join(', ')}`,
+      );
+    }
+    return name === QUEUES.DELIVERY ? this.deliveryQueue : this.deadLetterQueue;
+  }
+
   private deliveryOptions() {
     return {
       attempts: this.config.get<number>('delivery.maxAttempts') ?? 5,
@@ -52,7 +67,7 @@ export class QueuesService {
         delay: this.config.get<number>('delivery.backoffBaseMs') ?? 1000,
       },
       removeOnComplete: true,
-      removeOnFail: false,
+      removeOnFail: { age: FAILED_JOB_RETENTION_SECONDS },
     };
   }
 }

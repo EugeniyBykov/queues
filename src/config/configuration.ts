@@ -21,4 +21,8 @@ export default () => ({
     maxAttempts: Number(process.env.DELIVERY_MAX_ATTEMPTS ?? 5),
     backoffBaseMs: Number(process.env.DELIVERY_BACKOFF_BASE_MS ?? 1000),
   },
+  sentry: {
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.SENTRY_ENVIRONMENT ?? 'development',
+  },
 });

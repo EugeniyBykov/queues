@@ -1,4 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { QUEUES } from '../../queues/constants';
 import { Queue } from 'bullmq';
 import { QueuesService } from '../../queues/queues.service';
 import { QueueAdminController } from './queue-admin.controller';
@@ -25,8 +26,11 @@ describe('QueueAdminController', () => {
     delivery = makeQueue();
     deadLetter = makeQueue();
     queuesService = {
-      getDeliveryQueue: () => delivery,
-      getDeadLetterQueue: () => deadLetter,
+      getByName: (name: string) => {
+        if (name === QUEUES.DELIVERY) return delivery;
+        if (name === QUEUES.DEAD_LETTER) return deadLetter;
+        throw new BadRequestException(`Unknown queue: ${name}`);
+      },
     } as unknown as jest.Mocked<QueuesService>;
     controller = new QueueAdminController(queuesService);
   });

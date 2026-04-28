@@ -31,6 +31,7 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/swagger": "^11.4.1",
     "@nestjs/typeorm": "^11.0.1",
+    "@sentry/node": "^10.50.0",
     "axios": "^1.15.2",
     "bullmq": "^5.76.1",
     "class-transformer": "^0.5.1",

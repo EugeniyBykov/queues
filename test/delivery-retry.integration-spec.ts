@@ -68,8 +68,9 @@ describe('delivery retry + DLQ (integration)', () => {
 
     await queues.enqueueDelivery({
       id: 'm1',
+      channel: 'webhook',
+      target: 'http://t',
       body: 'b',
-      deliveries: [{ channel: 'webhook', target: 'http://t' }],
     });
 
     await waitFor(() => state.records.size > 0, 10000);
@@ -90,8 +91,9 @@ describe('delivery retry + DLQ (integration)', () => {
 
     await queues.enqueueDelivery({
       id: 'm2',
+      channel: 'webhook',
+      target: 'http://t',
       body: 'b',
-      deliveries: [{ channel: 'webhook', target: 'http://t' }],
     });
 
     await waitFor(() => state.records.size > 0, 10000);

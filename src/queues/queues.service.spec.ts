@@ -28,8 +28,9 @@ describe('QueuesService', () => {
 
   const payload: DeliveryPayload = {
     id: 'm1',
+    channel: 'webhook',
+    target: 'http://t',
     body: 'b',
-    deliveries: [{ channel: 'webhook', target: 'http://t' }],
   };
 
   it('enqueueDelivery adds a "deliver" job with attempts+backoff from config', async () => {
@@ -58,11 +59,14 @@ describe('QueuesService', () => {
       originalJobId: 'j1',
       payload,
       reason: 'boom',
-      channels: ['webhook'],
       attemptsMade: 5,
       failedAt: new Date().toISOString(),
     };
     await service.enqueueDeadLetter(dl);
-    expect(deadLetter.add).toHaveBeenCalledWith(JOB_NAMES.DEAD_LETTER, dl);
+    expect(deadLetter.add).toHaveBeenCalledWith(
+      JOB_NAMES.DEAD_LETTER,
+      dl,
+      expect.objectContaining({ removeOnComplete: true }),
+    );
   });
 });

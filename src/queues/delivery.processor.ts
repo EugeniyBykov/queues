@@ -21,7 +21,7 @@ export class DeliveryProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<DeliveryPayload>): Promise<DeliveryResult[]> {
+  async process(job: Job<DeliveryPayload>): Promise<DeliveryResult> {
     try {
       return await this.delivery.deliver(job.data);
     } catch (err) {
@@ -30,7 +30,7 @@ export class DeliveryProcessor extends WorkerHost {
       const isPermanent = err instanceof PermanentDeliveryError;
       if (isPermanent || isFinalAttempt) {
         this.logger.error(
-          `delivery terminal failure job=${job.id} permanent=${isPermanent} attemptsMade=${job.attemptsMade}`,
+          `delivery terminal failure job=${job.id} permanent=${isPermanent} attemptsMade=${job.attemptsMade + 1}`,
         );
         await this.deadLetter.publish(job, err);
       }

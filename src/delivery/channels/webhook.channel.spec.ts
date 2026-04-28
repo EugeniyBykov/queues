@@ -2,6 +2,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { AxiosError, AxiosResponse } from 'axios';
 import { of, throwError } from 'rxjs';
+import { DeliveryPayload } from '../delivery.interface';
 import { PermanentDeliveryError } from '../errors/permanent-delivery.error';
 import { WebhookChannel } from './webhook.channel';
 
@@ -19,6 +20,16 @@ const axiosError = (status: number): AxiosError =>
     response: { status } as any,
     isAxiosError: true,
   });
+
+const payload = (
+  overrides: Partial<DeliveryPayload> = {},
+): DeliveryPayload => ({
+  id: 'm1',
+  channel: 'webhook',
+  target: 'http://t',
+  body: 'b',
+  ...overrides,
+});
 
 describe('WebhookChannel', () => {
   let http: { post: jest.Mock };
@@ -41,12 +52,14 @@ describe('WebhookChannel', () => {
 
   it('POSTs with expected body and returns success on 2xx', async () => {
     http.post.mockReturnValue(of(response(200)));
-    const result = await channel.deliver('http://target/webhook', {
-      id: 'm1',
-      body: 'hi',
-      subject: 's',
-      metadata: { a: 1 },
-    });
+    const result = await channel.deliver(
+      payload({
+        target: 'http://target/webhook',
+        subject: 's',
+        body: 'hi',
+        metadata: { a: 1 },
+      }),
+    );
     expect(http.post).toHaveBeenCalledWith(
       'http://target/webhook',
       { id: 'm1', body: 'hi', subject: 's', metadata: { a: 1 } },
@@ -57,19 +70,17 @@ describe('WebhookChannel', () => {
 
   it('throws PermanentDeliveryError on 4xx', async () => {
     http.post.mockReturnValue(throwError(() => axiosError(404)));
-    await expect(
-      channel.deliver('http://t', { id: 'm1', body: 'b' }),
-    ).rejects.toBeInstanceOf(PermanentDeliveryError);
+    await expect(channel.deliver(payload())).rejects.toBeInstanceOf(
+      PermanentDeliveryError,
+    );
   });
 
   it('throws plain Error on 5xx (retryable)', async () => {
     http.post.mockReturnValue(throwError(() => axiosError(500)));
-    await expect(
-      channel.deliver('http://t', { id: 'm1', body: 'b' }),
-    ).rejects.toThrow();
-    await expect(
-      channel.deliver('http://t', { id: 'm1', body: 'b' }),
-    ).rejects.not.toBeInstanceOf(PermanentDeliveryError);
+    await expect(channel.deliver(payload())).rejects.toThrow();
+    await expect(channel.deliver(payload())).rejects.not.toBeInstanceOf(
+      PermanentDeliveryError,
+    );
   });
 
   it('throws plain Error on timeout / network error', async () => {
@@ -78,8 +89,8 @@ describe('WebhookChannel', () => {
         Object.assign(new AxiosError('timeout'), { code: 'ECONNABORTED' }),
       ),
     );
-    await expect(
-      channel.deliver('http://t', { id: 'm1', body: 'b' }),
-    ).rejects.not.toBeInstanceOf(PermanentDeliveryError);
+    await expect(channel.deliver(payload())).rejects.not.toBeInstanceOf(
+      PermanentDeliveryError,
+    );
   });
 });

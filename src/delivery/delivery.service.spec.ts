@@ -1,18 +1,16 @@
 import { DeliveryFactory } from './delivery.factory';
 import { DeliveryService } from './delivery.service';
-import { DeliveryChannelHandler, DeliveryPayload } from './delivery.interface';
+import { DeliveryPayload } from './delivery.interface';
 
 describe('DeliveryService', () => {
   const payload: DeliveryPayload = {
     id: 'm1',
+    channel: 'webhook',
+    target: 'http://t',
     body: 'b',
-    deliveries: [
-      { channel: 'webhook', target: 'http://t' },
-      { channel: 'email', target: 'x@y' },
-    ],
   };
 
-  it('dispatches each delivery to its handler and aggregates results', async () => {
+  it('routes the payload to the matching handler', async () => {
     const webhook = {
       canHandle: (c: string) => c === 'webhook',
       deliver: jest.fn().mockResolvedValue({
@@ -23,23 +21,16 @@ describe('DeliveryService', () => {
     };
     const email = {
       canHandle: (c: string) => c === 'email',
-      deliver: jest
-        .fn()
-        .mockResolvedValue({ success: true, channel: 'email', target: 'x@y' }),
+      deliver: jest.fn(),
     };
     const service = new DeliveryService(new DeliveryFactory([webhook, email]));
-    const results = await service.deliver(payload);
-    expect(results).toHaveLength(2);
-    expect(webhook.deliver).toHaveBeenCalledWith('http://t', {
-      id: 'm1',
-      body: 'b',
-      subject: undefined,
-      metadata: undefined,
-    });
-    expect(email.deliver).toHaveBeenCalled();
+    const result = await service.deliver(payload);
+    expect(result.success).toBe(true);
+    expect(webhook.deliver).toHaveBeenCalledWith(payload);
+    expect(email.deliver).not.toHaveBeenCalled();
   });
 
-  it('propagates the first error (stops at failing channel)', async () => {
+  it('propagates handler errors', async () => {
     const failing = {
       canHandle: () => true,
       deliver: jest.fn().mockRejectedValue(new Error('boom')),

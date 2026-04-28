@@ -78,6 +78,14 @@ class EnvVariables {
   @IsOptional()
   @IsNumber()
   DELIVERY_BACKOFF_BASE_MS?: number;
+
+  @IsOptional()
+  @IsString()
+  SENTRY_DSN?: string;
+
+  @IsOptional()
+  @IsString()
+  SENTRY_ENVIRONMENT?: string;
 }
 
 export function validate(config: Record<string, unknown>) {

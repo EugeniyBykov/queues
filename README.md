@@ -4,8 +4,8 @@ NestJS service that delivers messages to webhook / internal-service / email chan
 
 ## What it does
 
-- `POST /deliveries` enqueues a message to the `delivery` BullMQ queue.
-- The worker picks up each job and dispatches it to the listed channels over HTTP.
+- `POST /deliveries` enqueues a single delivery to the `delivery` BullMQ queue. To deliver the same message to multiple channels, POST once per channel.
+- The worker picks up each job and dispatches it to the channel over HTTP.
 - On failure, BullMQ retries with exponential backoff (default 5 attempts, 1s base).
 - On terminal failure (all retries exhausted, or a `4xx` response → "permanent"), the job is published to `dead_letter` and persisted to Postgres.
 - Admins can list DLQ records, inspect queues, and resubmit failed jobs.
@@ -47,11 +47,13 @@ All configuration comes from environment variables (see `.env.example`):
 | `PORT` | API HTTP port | `3000` |
 | `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` | Postgres connection | `db` / `5432` / `postgres` / `postgres` / `queues` |
 | `REDIS_HOST` / `REDIS_PORT` | Redis connection | `redis` / `6379` |
-| `INTERNAL_SERVICE_URL` | URL for the `internal-service` channel | `http://localhost:4001/internal` |
-| `EMAIL_SERVICE_URL` | URL for the `email` channel | `http://localhost:4002/email` |
+| `INTERNAL_SERVICE_URL` | URL for the `internal-service` channel | `http://localhost:3000/mock/internal-service` |
+| `EMAIL_SERVICE_URL` | URL for the `email` channel | `http://localhost:3000/mock/email` |
 | `CHANNEL_TIMEOUT_MS` | Axios timeout for channel calls | `10000` |
 | `DELIVERY_MAX_ATTEMPTS` | BullMQ retry attempts per delivery | `5` |
 | `DELIVERY_BACKOFF_BASE_MS` | Exponential backoff base delay | `1000` |
+
+The default URLs point at the built-in mock controller (see [Local mocks](#local-mocks)) so the full pipeline works out of the box without any external services.
 
 ## API
 
@@ -63,12 +65,10 @@ Content-Type: application/json
 
 {
   "id": "msg-1",
+  "channel": "webhook",
+  "target": "https://example.com/hook",
   "subject": "hello",
   "body": "hi there",
-  "deliveries": [
-    { "channel": "webhook", "target": "https://example.com/hook" },
-    { "channel": "email",   "target": "alice@example.com" }
-  ],
   "metadata": { "requestId": "abc" }
 }
 ```
@@ -89,9 +89,76 @@ All under a passthrough guard — wire real auth before production.
 
 Full OpenAPI at `/api/docs`.
 
+## Local mocks
+
+The API process exposes mock channel endpoints under `/mock/*` so the full delivery pipeline can be exercised end-to-end without any external services. They accept any JSON body, log it, and return `200 { ok: true }` by default.
+
+The mock controller is wired into `ApiModule` only when `NODE_ENV !== 'production'`.
+
+| Path | Used by | How to wire |
+|---|---|---|
+| `POST /mock/webhook` | `webhook` channel | set as `target` in the request body |
+| `POST /mock/email` | `email` channel | `EMAIL_SERVICE_URL` env var |
+| `POST /mock/internal-service` | `internal-service` channel | `INTERNAL_SERVICE_URL` env var |
+
+### Producing failures
+
+Append `?fail=<status>` to any mock URL to make it return that HTTP status. This is the way to drive the retry / DLQ paths during local testing:
+
+- `?fail=400` (or any 4xx) → channel throws `PermanentDeliveryError` → BullMQ skips remaining retries → straight to DLQ.
+- `?fail=500` (or any 5xx) → channel throws plain `Error` → BullMQ retries with exponential backoff up to `DELIVERY_MAX_ATTEMPTS`, then DLQ.
+
+Example — happy path:
+
+```bash
+curl -X POST http://localhost:3000/deliveries \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "id": "demo-ok",
+    "channel": "webhook",
+    "target": "http://localhost:3000/mock/webhook",
+    "body": "hi"
+  }'
+```
+
+Permanent failure (skips retries, goes straight to DLQ):
+
+```bash
+curl -X POST http://localhost:3000/deliveries \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "id": "demo-permanent",
+    "channel": "webhook",
+    "target": "http://localhost:3000/mock/webhook?fail=400",
+    "body": "hi"
+  }'
+```
+
+Retryable failure (5 attempts with exponential backoff, then DLQ):
+
+```bash
+curl -X POST http://localhost:3000/deliveries \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "id": "demo-retry",
+    "channel": "webhook",
+    "target": "http://localhost:3000/mock/webhook?fail=500",
+    "body": "hi"
+  }'
+```
+
+For `email` / `internal-service`, set the `?fail=...` query directly in the env var, e.g. `EMAIL_SERVICE_URL=http://localhost:3000/mock/email?fail=500`.
+
+After a delivery dead-letters, inspect and resubmit it:
+
+```bash
+curl http://localhost:3000/admin/dead-letter
+curl -X POST http://localhost:3000/admin/dead-letter/<id>/resubmit
+```
+
 ## Channel model
 
-Each channel is a class implementing `DeliveryChannelHandler`. They are collected via the `DELIVERY_CHANNELS` DI token in `src/delivery/delivery.module.ts`.
+Each channel extends `HttpChannelBase` (`src/delivery/channels/http-channel.base.ts`) which implements `DeliveryChannelHandler`. The base owns axios, timeout, logging, and 4xx/5xx classification; subclasses only declare the channel name, the endpoint URL, and the POST body shape. Channels are collected via the `DELIVERY_CHANNELS` DI token in `src/delivery/delivery.module.ts`.
 
 | Channel | URL source | What `target` means | POST body |
 |---|---|---|---|
@@ -99,19 +166,23 @@ Each channel is a class implementing `DeliveryChannelHandler`. They are collecte
 | `internal-service` | `INTERNAL_SERVICE_URL` | service path/identifier | `{ target, id, subject, body, metadata }` |
 | `email` | `EMAIL_SERVICE_URL` | recipient address | `{ to: target, id, subject, body, metadata }` |
 
-Each channel:
-- 10s axios timeout
+Outcome handling (uniform across channels):
+- axios timeout = `CHANNEL_TIMEOUT_MS` (default 10s)
 - 2xx → success
 - 4xx → throws `PermanentDeliveryError` (skips retries, goes straight to DLQ)
 - 5xx / network error / timeout → throws regular `Error` (counts as a retry attempt)
 
 ### Adding a new channel
 
-1. Create `src/delivery/channels/<name>.channel.ts`.
-2. Implement `canHandle(channel)` + `deliver(target, payload)`.
-3. Add it to the `DELIVERY_CHANNELS` factory in `delivery.module.ts`.
-4. Extend the `DeliveryChannel` type union in `delivery.interface.ts`.
-5. Register the new class in both `DeliveryModule.providers` and the `inject` array of the channels factory.
+1. Create `src/delivery/channels/<name>.channel.ts` extending `HttpChannelBase`:
+   - declare `channel` — the `DeliveryChannel` union string
+   - implement `endpoint(payload)` — return the URL (from `ConfigService` or from `payload.target`)
+   - implement `buildBody(payload)` — the POST body shape
+   - (optional) override `permanentErrorMessage(status, payload)` — custom message for the 4xx case
+   - **declare an explicit constructor** that calls `super(http, config)`. Nest DI requires the subclass to have its own constructor so that `design:paramtypes` metadata is emitted; without it the subclass is instantiated with `undefined` dependencies. See the existing channels for the pattern.
+2. Extend the `DeliveryChannel` type union in `src/delivery/delivery.interface.ts`.
+3. Register the new class in both `DeliveryModule.providers` and the `inject` array of the `DELIVERY_CHANNELS` factory.
+4. Add `<name>.channel.spec.ts` with a 2xx / 4xx / 5xx / timeout matrix (see `webhook.channel.spec.ts` for the pattern).
 
 ## Queue model
 

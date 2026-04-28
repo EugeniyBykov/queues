@@ -32,4 +32,16 @@ export default tseslint.config(
       "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },
+  {
+    // Spec/test files use Jest mock objects that trigger false positives:
+    // - unbound-method: `expect(repo.save).toHaveBeenCalledWith(...)` is fine for mocks
+    // - no-unsafe-assignment: mock factories return loosely-typed values by design
+    // - require-await: jest.fn(async () => value) is the standard mock signature
+    files: ['**/*.spec.ts', 'test/**/*.ts'],
+    rules: {
+      '@typescript-eslint/unbound-method': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/require-await': 'off',
+    },
+  },
 );

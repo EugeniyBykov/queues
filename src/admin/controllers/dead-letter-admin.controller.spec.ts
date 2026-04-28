@@ -9,8 +9,8 @@ const record = (
 ): DeadLetterRecord => ({
   id: 'r1',
   originalJobId: 'j1',
-  payload: { id: 'm1', body: 'b', deliveries: [] },
-  channels: ['webhook'],
+  payload: { id: 'm1', channel: 'webhook', target: 'http://t', body: 'b' },
+  channel: 'webhook',
   reason: 'boom',
   attemptsMade: 5,
   failedAt: new Date(),

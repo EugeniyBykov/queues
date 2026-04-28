@@ -1,10 +1,19 @@
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as Sentry from '@sentry/node';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { ApiModule } from './app/api.module';
+import { AllExceptionsFilter } from './notifications/all-exceptions.filter';
+import { initSentry } from './notifications/sentry.bootstrap';
 
 async function bootstrap() {
+  initSentry({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.SENTRY_ENVIRONMENT ?? 'development',
+    process: 'api',
+  });
+
   const app = await NestFactory.create(ApiModule, { bufferLogs: true });
   app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
 
@@ -24,6 +33,7 @@ async function bootstrap() {
         }),
     }),
   );
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Queues API')
@@ -38,4 +48,9 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT ?? 3000);
 }
-bootstrap();
+bootstrap().catch((err) => {
+  Sentry.captureException(err, { tags: { phase: 'bootstrap' } });
+
+  console.error('API bootstrap failed', err);
+  process.exit(1);
+});

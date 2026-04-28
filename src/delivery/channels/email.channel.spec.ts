@@ -2,6 +2,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { AxiosError, AxiosResponse } from 'axios';
 import { of, throwError } from 'rxjs';
+import { DeliveryPayload } from '../delivery.interface';
 import { PermanentDeliveryError } from '../errors/permanent-delivery.error';
 import { EmailChannel } from './email.channel';
 
@@ -13,6 +14,16 @@ const response = (status: number): AxiosResponse =>
     config: {} as any,
     statusText: '',
   }) as AxiosResponse;
+
+const payload = (
+  overrides: Partial<DeliveryPayload> = {},
+): DeliveryPayload => ({
+  id: 'm1',
+  channel: 'email',
+  target: 'alice@example.com',
+  body: 'b',
+  ...overrides,
+});
 
 describe('EmailChannel', () => {
   let http: { post: jest.Mock };
@@ -38,11 +49,7 @@ describe('EmailChannel', () => {
 
   it('POSTs to configured URL with { to: target } body', async () => {
     http.post.mockReturnValue(of(response(202)));
-    await channel.deliver('alice@example.com', {
-      id: 'm1',
-      body: 'hi',
-      subject: 'hello',
-    });
+    await channel.deliver(payload({ subject: 'hello', body: 'hi' }));
     expect(http.post).toHaveBeenCalledWith(
       'http://mail-svc/send',
       {
@@ -64,8 +71,8 @@ describe('EmailChannel', () => {
         }),
       ),
     );
-    await expect(
-      channel.deliver('alice@example.com', { id: 'm1', body: 'b' }),
-    ).rejects.toBeInstanceOf(PermanentDeliveryError);
+    await expect(channel.deliver(payload())).rejects.toBeInstanceOf(
+      PermanentDeliveryError,
+    );
   });
 });

@@ -2,6 +2,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { AxiosResponse } from 'axios';
 import { of } from 'rxjs';
+import { DeliveryPayload } from '../delivery.interface';
 import { InternalServiceChannel } from './internal-service.channel';
 
 const response = (status: number): AxiosResponse =>
@@ -12,6 +13,16 @@ const response = (status: number): AxiosResponse =>
     config: {} as any,
     statusText: '',
   }) as AxiosResponse;
+
+const payload = (
+  overrides: Partial<DeliveryPayload> = {},
+): DeliveryPayload => ({
+  id: 'm1',
+  channel: 'internal-service',
+  target: 'notifications',
+  body: 'hi',
+  ...overrides,
+});
 
 describe('InternalServiceChannel', () => {
   let http: { post: jest.Mock };
@@ -37,7 +48,7 @@ describe('InternalServiceChannel', () => {
 
   it('POSTs to configured URL with target + payload in body', async () => {
     http.post.mockReturnValue(of(response(200)));
-    await channel.deliver('notifications', { id: 'm1', body: 'hi' });
+    await channel.deliver(payload());
     expect(http.post).toHaveBeenCalledWith(
       'http://internal/api',
       {

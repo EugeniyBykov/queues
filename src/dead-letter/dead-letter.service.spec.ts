@@ -6,8 +6,9 @@ import { QueuesService } from '../queues/queues.service';
 describe('DeadLetterService', () => {
   const payload: DeliveryPayload = {
     id: 'm1',
+    channel: 'webhook',
+    target: 'http://t',
     body: 'b',
-    deliveries: [{ channel: 'webhook', target: 'http://t' }],
   };
 
   let queues: jest.Mocked<QueuesService>;
@@ -32,7 +33,6 @@ describe('DeadLetterService', () => {
         originalJobId: 'j1',
         payload,
         reason: 'boom',
-        channels: ['webhook'],
         attemptsMade: 5,
       }),
     );

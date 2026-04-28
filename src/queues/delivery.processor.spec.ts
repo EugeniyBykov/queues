@@ -7,8 +7,9 @@ import { DeliveryProcessor } from './delivery.processor';
 
 const payload: DeliveryPayload = {
   id: 'm1',
+  channel: 'webhook',
+  target: 'http://t',
   body: 'b',
-  deliveries: [{ channel: 'webhook', target: 'http://t' }],
 };
 
 const makeJob = (
@@ -37,12 +38,14 @@ describe('DeliveryProcessor', () => {
     processor = new DeliveryProcessor(delivery, deadLetter);
   });
 
-  it('returns delivery results on success', async () => {
-    delivery.deliver.mockResolvedValue([
-      { success: true, channel: 'webhook', target: 'http://t' },
-    ]);
+  it('returns the delivery result on success', async () => {
+    delivery.deliver.mockResolvedValue({
+      success: true,
+      channel: 'webhook',
+      target: 'http://t',
+    });
     const result = await processor.process(makeJob(0, 5));
-    expect(result).toHaveLength(1);
+    expect(result.success).toBe(true);
     expect(deadLetter.publish).not.toHaveBeenCalled();
   });
 

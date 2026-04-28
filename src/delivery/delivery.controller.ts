@@ -8,6 +8,7 @@ import { QueuesService } from '../queues/queues.service';
 export class DeliveryController {
   constructor(private readonly queues: QueuesService) {}
 
+  // let`s assume this service behind an internal gateway that already authenticates callers (for simplicity)
   @Post()
   @ApiOperation({ summary: 'Enqueue a delivery job' })
   async create(@Body() body: CreateDeliveryDto) {

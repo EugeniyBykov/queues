@@ -19,8 +19,8 @@ export class DeadLetterRecord {
   @Column('jsonb')
   payload: DeliveryPayload;
 
-  @Column('text', { array: true })
-  channels: string[];
+  @Column('text')
+  channel: string;
 
   @Column('text')
   reason: string;
